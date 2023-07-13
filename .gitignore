@@ -1165,3 +1165,4 @@ build/partition_table/partition-table.bin
 .settings/org.eclipse.core.resources.prefs
 .cproject
 .project
+build/

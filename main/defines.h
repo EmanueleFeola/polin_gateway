@@ -1,7 +1,7 @@
 #define TAG "MAIN"
 #define FIRMWARE_VERSION 1
-#define START_WIFI
-//#define START_ETH
+#define START_WIFI // uncomment to connect to wifi
+//#define START_ETH // uncomment to connect to ethernet
 
 // NETWORK
 #define STATIC_IP_ADDR "192.168.178.15"
@@ -11,8 +11,8 @@
 #define STATIC_DNS_BACKUP_ADDR "8.8.8.8"
 
 // WIFI
-#define EXAMPLE_ESP_WIFI_SSID "CasaFeola-Eolo"
-#define EXAMPLE_ESP_WIFI_PASS "straccidinebbialenti"
+#define EXAMPLE_ESP_WIFI_SSID "nome della wifi"
+#define EXAMPLE_ESP_WIFI_PASS "password della wifi"
 // #define EXAMPLE_ESP_WIFI_SSID "Pixel_8801"
 // #define EXAMPLE_ESP_WIFI_PASS "franzogna"
 #define MAX_RETRY 10

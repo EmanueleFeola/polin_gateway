@@ -1,35 +1,22 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-S2 | ESP32-S3 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- |
-
-# _Sample project_
-
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
-
-This is the simplest buildable example. The example is used by command `idf.py create-project`
-that copies the project to user specified path and set it's name. For more information follow the [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project)
-
-
-
-## How to use example
-We encourage the users to use the example as a template for the new projects.
-A recommended way is to follow the instructions on a [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project).
-
-## Example folder contents
-
-The project **sample_project** contains one source file in C language [main.c](main/main.c). The file is located in folder [main](main).
-
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt`
-files that provide set of directives and instructions describing the project's source files and targets
-(executable, library, or both). 
-
-Below is short explanation of remaining files in the project folder.
-
-```
-├── CMakeLists.txt
-├── main
-│   ├── CMakeLists.txt
-│   └── main.c
-└── README.md                  This is the file you are currently reading
-```
-Additionally, the sample project contains Makefile and component.mk files, used for the legacy Make based build system. 
-They are not used or needed when building with CMake and idf.py.
+# IDE
+used IDE: Espressif-IDE (https://docs.espressif.com/projects/esp-idf/en/release-v4.2/esp32/get-started/eclipse-setup.html)
+# Project configuration
+menuconfig settings:
+- websocket server support
+- custom partition table csv, partitions.csv
+- flash size: 4MB
+# Hardware
+Tested on "esp32 evb" board
+# Features
+- esp32 connects to network with static ip, either wifi or ethernet depending on defines.h settings
+	- static ip address and wifi network credentials are set in defines.h
+- web server
+	- stores html page in spiffs file system
+	- serve page and allows to toggle relè
+- ota
+	- automatically downloads firmware (.bin file) if a new firmware version is released
+	- firmware version and firmware bin file are set in a file hosted in the cloud
+		- see defines.h (OTA_URI_JSON)
+- mqtt client
+	- connects to server and sends/receive messages
+	- mqtt server uri is set in defines.h (MQTT_URI)
