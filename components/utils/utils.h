@@ -1,5 +1,4 @@
 #include "esp_timer.h"
-//#include "esp_netif.h"
 #include "lwip/dns.h"
 
 unsigned long millis();

@@ -5,7 +5,6 @@
 
 #include "esp_wifi.h"
 #include "esp_eth.h"
-#include <esp_http_server.h>
 #include "esp_system.h"
 #include "esp_event.h"
 #include "esp_netif.h"
@@ -17,6 +16,7 @@
 #include "nvs_flash.h"
 #include "rom/gpio.h"
 #include "driver/gpio.h"
+#include "esp_http_server.h"
 
 #include "lwip/sockets.h"
 #include "lwip/dns.h"
@@ -32,6 +32,14 @@
 #include "cJSON.h"
 #include "defines.h"
 #include "utils.h"
+#include "modbus_utils.h"
+
+#include "esp_log.h"
+#include "modbus_params.h"  // for modbus parameters structures
+#include "esp_modbus_common.h"
+#include "mbcontroller.h"
+#include "driver/uart.h"
+#include "sdkconfig.h"
 
 static int retry_cnt = 0;
 bool connection_ok = false;
@@ -45,12 +53,9 @@ char index_html[4096];
 char rcv_buffer[1000];
 char response_data[4096];
 
-static void set_static_ip(esp_netif_t *netif)
-{
-	esp_netif_ip_info_t ip_info =
-		{ 0 };
-	esp_netif_dns_info_t dns_info =
-		{ 0 };
+static void set_static_ip(esp_netif_t *netif) {
+	esp_netif_ip_info_t ip_info = { 0 };
+	esp_netif_dns_info_t dns_info = { 0 };
 
 	uint8_t ip_arr[4];
 	uint8_t ip_dns_arr[4];
@@ -73,17 +78,35 @@ static void set_static_ip(esp_netif_t *netif)
 	esp_netif_set_dns_info(netif, ESP_NETIF_DNS_MAIN, &dns_info);
 }
 
+static void test_modbus_read_write() {
+	esp_err_t err = ESP_OK;
+	uint16_t register_data = 0;
+
+	ESP_LOGI(TAG, "Modbus master test start");
+
+	err = read_modbus_parameter(HOLD_1, &register_data);
+	if (err == ESP_OK) {
+		register_data += 1;
+		err = write_modbus_parameter(HOLD_1, &register_data);
+	}
+
+	err = read_modbus_parameter(HOLD_2, &register_data);
+	if (err == ESP_OK) {
+		register_data += 1;
+		err = write_modbus_parameter(HOLD_2, &register_data);
+	}
+
+	ESP_LOGI(TAG, "Modbus master test end");
+}
+
 /// ETHERNET START
 static void eth_event_handler(void *arg, esp_event_base_t event_base,
-		int32_t event_id, void *event_data)
-{
-	uint8_t mac_addr[6] =
-		{ 0 };
+		int32_t event_id, void *event_data) {
+	uint8_t mac_addr[6] = { 0 };
 	/* we can get the ethernet driver handle from event data */
 	esp_eth_handle_t eth_handle = *(esp_eth_handle_t*) event_data;
 
-	switch (event_id)
-	{
+	switch (event_id) {
 	case ETHERNET_EVENT_CONNECTED:
 		esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, mac_addr);
 		ESP_LOGI(TAG, "Ethernet Link Up");
@@ -106,8 +129,7 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
 }
 
 static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
-		int32_t event_id, void *event_data)
-{
+		int32_t event_id, void *event_data) {
 	ip_event_got_ip_t *event = (ip_event_got_ip_t*) event_data;
 	const esp_netif_ip_info_t *ip_info = &event->ip_info;
 
@@ -121,8 +143,7 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
 	connection_ok = true;
 }
 
-static void ethernet_init()
-{
+static void ethernet_init() {
 	eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG(); // apply default common MAC configuration
 	eth_esp32_emac_config_t esp32_emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG(); // apply default vendor-specific MAC configuration
 	esp32_emac_config.smi_mdc_gpio_num = PIN_ETH_MDC;
@@ -163,10 +184,8 @@ static void ethernet_init()
 
 /// WIFI
 static esp_err_t wifi_event_handler(void *arg, esp_event_base_t event_base,
-		int32_t event_id, void *event_data)
-{
-	switch (event_id)
-	{
+		int32_t event_id, void *event_data) {
+	switch (event_id) {
 	case WIFI_EVENT_STA_START:
 		esp_wifi_connect();
 		ESP_LOGI(TAG, "Trying to connect with Wi-Fi");
@@ -184,11 +203,9 @@ static esp_err_t wifi_event_handler(void *arg, esp_event_base_t event_base,
 
 	case WIFI_EVENT_STA_DISCONNECTED:
 		ESP_LOGI(TAG, "disconnected: Retrying Wi-Fi\n");
-		if (retry_cnt++ < MAX_RETRY)
-		{
+		if (retry_cnt++ < MAX_RETRY) {
 			esp_wifi_connect();
-		}
-		else
+		} else
 			ESP_LOGI(TAG, "Max Retry Failed: Wi-Fi Connection\n");
 		break;
 
@@ -198,18 +215,15 @@ static esp_err_t wifi_event_handler(void *arg, esp_event_base_t event_base,
 	return ESP_OK;
 }
 
-void wifi_init(void)
-{
+void wifi_init(void) {
 	printf("[wifi_init]\n");
 
 	esp_event_loop_create_default();
 
-	wifi_config_t wifi_config =
-		{ .sta =
-			{
-					.ssid = EXAMPLE_ESP_WIFI_SSID,
-					.password = EXAMPLE_ESP_WIFI_PASS,
-					.threshold.authmode = WIFI_AUTH_WPA2_PSK, }, };
+	wifi_config_t wifi_config = { .sta = {
+			.ssid = EXAMPLE_ESP_WIFI_SSID,
+			.password = EXAMPLE_ESP_WIFI_PASS,
+			.threshold.authmode = WIFI_AUTH_WPA2_PSK, }, };
 	esp_netif_init();
 	esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
 
@@ -230,11 +244,9 @@ void wifi_init(void)
 /// WIFI END
 
 /// HTTP
-esp_err_t _http_event_handler(esp_http_client_event_t *evt)
-{
+esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
 
-	switch (evt->event_id)
-	{
+	switch (evt->event_id) {
 	case HTTP_EVENT_ERROR:
 		break;
 	case HTTP_EVENT_ON_CONNECTED:
@@ -244,8 +256,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 	case HTTP_EVENT_ON_HEADER:
 		break;
 	case HTTP_EVENT_ON_DATA:
-		if (!esp_http_client_is_chunked_response(evt->client))
-		{
+		if (!esp_http_client_is_chunked_response(evt->client)) {
 			strncpy(rcv_buffer, (char*) evt->data, evt->data_len);
 		}
 		break;
@@ -261,90 +272,65 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 /// HTTP END
 
 /// OTA START
-void start_ota_update(char *ota_uri_bin)
-{
+void start_ota_update(char *ota_uri_bin) {
 	ESP_LOGI(TAG, "start_ota_update %s\n", ota_uri_bin);
 
-	esp_http_client_config_t config =
-		{
-				.url = ota_uri_bin,
-				.cert_pem = (char*) OTA_SERVER_ROOT_CA,
-				.skip_cert_common_name_check = false };
-	esp_https_ota_config_t ota_config =
-		{ .http_config = &config, };
+	esp_http_client_config_t config = { .url = ota_uri_bin, .cert_pem =
+			(char*) OTA_SERVER_ROOT_CA, .skip_cert_common_name_check = false };
+	esp_https_ota_config_t ota_config = { .http_config = &config, };
 
 	esp_err_t ret = esp_https_ota(&ota_config);
-	if (ret == ESP_OK)
-	{
+	if (ret == ESP_OK) {
 		printf("OTA OK, restarting...\n");
 		esp_restart();
-	}
-	else
-	{
+	} else {
 		printf("OTA failed...\n");
 	}
 }
 
-char* ota_get_json()
-{
+char* ota_get_json() {
 	ESP_LOGI(TAG, "ota_get_json");
 
 	// configure the esp_http_client
-	esp_http_client_config_t config =
-		{ .url = OTA_URI_JSON, .event_handler = _http_event_handler, .cert_pem =
-				(char*) OTA_SERVER_ROOT_CA, };
+	esp_http_client_config_t config = { .url = OTA_URI_JSON, .event_handler =
+			_http_event_handler, .cert_pem = (char*) OTA_SERVER_ROOT_CA, };
 	esp_http_client_handle_t client = esp_http_client_init(&config);
 
 	// download json file (fw version and bin uri)
 	esp_err_t err = esp_http_client_perform(client);
 
-	if (err == ESP_OK)
-	{
+	if (err == ESP_OK) {
 		cJSON *json = cJSON_Parse(rcv_buffer);
-		if (json == NULL)
-		{
+		if (json == NULL) {
 			ESP_LOGE(TAG, "cannot parse downloaded json file. abort");
-		}
-		else
-		{
+		} else {
 			cJSON *version = cJSON_GetObjectItemCaseSensitive(json, "version");
 			cJSON *file = cJSON_GetObjectItemCaseSensitive(json, "uri");
 
 			// check the version
-			if (!cJSON_IsNumber(version))
-			{
+			if (!cJSON_IsNumber(version)) {
 				ESP_LOGE(TAG, "cannot read version field. abort");
-			}
-			else
-			{
+			} else {
 				int new_version = (int) version->valuedouble;
 				ESP_LOGI(TAG, "current fw ver %d, available fw ver %d",
 						FIRMWARE_VERSION, new_version);
 
-				if (new_version > FIRMWARE_VERSION)
-				{
-					if (cJSON_IsString(file) && (file->valuestring != NULL))
-					{
+				if (new_version > FIRMWARE_VERSION) {
+					if (cJSON_IsString(file) && (file->valuestring != NULL)) {
 						ESP_LOGI(TAG, "upgrading. firmware uri: %s",
 								file->valuestring);
 
 						esp_http_client_cleanup(client);
 						return (char*) file->valuestring;
-					}
-					else
-					{
+					} else {
 						ESP_LOGE(TAG, "cannot read uri field. abort");
 					}
-				}
-				else
-				{
+				} else {
 					ESP_LOGI(TAG, "not upgrading. upgrade is not needed.");
 				}
 			}
 		}
-	}
-	else
-	{
+	} else {
 		ESP_LOGE(TAG, "unable to download json filen");
 	}
 
@@ -352,10 +338,8 @@ char* ota_get_json()
 	return NULL;
 }
 
-static void task_ota(void *pvParameters)
-{
-	while (!connection_ok)
-	{
+static void task_ota(void *pvParameters) {
+	while (!connection_ok) {
 		// wait for connection
 		vTaskDelay(5000 / portTICK_PERIOD_MS);
 	}
@@ -369,25 +353,21 @@ static void task_ota(void *pvParameters)
 }
 /// OTA END
 
-static void initi_web_page_buffer(void)
-{
-	esp_vfs_spiffs_conf_t conf =
-		{ .base_path = "/spiffs", .partition_label =
-		NULL, .max_files = 5, .format_if_mount_failed = true };
+static void initi_web_page_buffer(void) {
+	esp_vfs_spiffs_conf_t conf = { .base_path = "/spiffs", .partition_label =
+	NULL, .max_files = 5, .format_if_mount_failed = true };
 
 	ESP_ERROR_CHECK(esp_vfs_spiffs_register(&conf));
 
 	memset((void*) index_html, 0, sizeof(index_html));
 	struct stat st;
-	if (stat(INDEX_HTML_PATH, &st))
-	{
+	if (stat(INDEX_HTML_PATH, &st)) {
 		ESP_LOGE(TAG, "index.html not found");
 		return;
 	}
 
 	FILE *fp = fopen(INDEX_HTML_PATH, "r");
-	if (fread(index_html, st.st_size, 1, fp) == 0)
-	{
+	if (fread(index_html, st.st_size, 1, fp) == 0) {
 		ESP_LOGE(TAG, "fread failed");
 	}
 
@@ -398,14 +378,12 @@ static void initi_web_page_buffer(void)
 
 /// MQTT START
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
-		int32_t event_id, void *event_data)
-{
+		int32_t event_id, void *event_data) {
 	// ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
 	esp_mqtt_event_handle_t event = event_data;
 	esp_mqtt_client_handle_t client = event->client;
 	int msg_id;
-	switch ((esp_mqtt_event_id_t) event_id)
-	{
+	switch ((esp_mqtt_event_id_t) event_id) {
 	case MQTT_EVENT_CONNECTED:
 		ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
 		mqtt_connected = true;
@@ -441,14 +419,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 	}
 }
 
-static void mqtt_app_start(void)
-{
+static void mqtt_app_start(void) {
 	ESP_LOGI(TAG, "STARTING MQTT");
 
-	const esp_mqtt_client_config_t mqttConfig =
-		{ .broker =
-			{ .address.uri =
-			MQTT_URI, }, };
+	const esp_mqtt_client_config_t mqttConfig = { .broker = { .address.uri =
+	MQTT_URI, .verification.certificate =
+	MQTT_SERVER_CERT }, .credentials = { .username = MQTT_USERNAME, .client_id =
+	NULL, .authentication = { .password = MQTT_PASSWORD } } };
 
 	client = esp_mqtt_client_init(&mqttConfig);
 	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler,
@@ -456,19 +433,15 @@ static void mqtt_app_start(void)
 	esp_mqtt_client_start(client);
 }
 
-void publisher_task(void *params)
-{
-	while (!connection_ok)
-	{
+void publisher_task(void *params) {
+	while (!connection_ok) {
 		vTaskDelay(100 / portTICK_PERIOD_MS);
 	}
 
 	mqtt_app_start();
 
-	while (true)
-	{
-		if (mqtt_connected)
-		{
+	while (true) {
+		if (mqtt_connected) {
 			char pub_str[100];
 			int max_len = sizeof(pub_str);
 			snprintf(pub_str, max_len, "hello world banana %d", (int) millis());
@@ -477,37 +450,31 @@ void publisher_task(void *params)
 			esp_mqtt_client_publish(client, "/emanuele_topic/test3/", pub_str,
 					0, 0, 0);
 
-			vTaskDelay(2500 / portTICK_PERIOD_MS);
+			vTaskDelay(5000 / portTICK_PERIOD_MS);
 		}
 	}
 }
 /// MQTT END
 
 /// HTTP SERVER + WEBSOCKET START
-struct async_resp_arg
-{ // Asynchronous response data structure
+struct async_resp_arg { // Asynchronous response data structure
 	httpd_handle_t hd; // Server instance
 	int fd;            // Session socket file descriptor
 };
 
-esp_err_t get_req_handler(httpd_req_t *req)
-{
+esp_err_t get_req_handler(httpd_req_t *req) {
 	printf("[get_req_handler] called");
 	int response;
-	if (rele_state)
-	{
+	if (rele_state) {
 		sprintf(response_data, index_html, "ON");
-	}
-	else
-	{
+	} else {
 		sprintf(response_data, index_html, "OFF");
 	}
 	response = httpd_resp_send(req, response_data, HTTPD_RESP_USE_STRLEN);
 	return response;
 }
 
-static void ws_async_send(void *arg)
-{
+static void ws_async_send(void *arg) {
 	httpd_ws_frame_t ws_pkt;
 	struct async_resp_arg *resp_arg = arg;
 	httpd_handle_t hd = resp_arg->hd;
@@ -531,34 +498,28 @@ static void ws_async_send(void *arg)
 
 	esp_err_t ret = httpd_get_client_list(server, &fds, client_fds);
 
-	if (ret != ESP_OK)
-	{
+	if (ret != ESP_OK) {
 		return;
 	}
 
-	for (int i = 0; i < fds; i++)
-	{
+	for (int i = 0; i < fds; i++) {
 		int client_info = httpd_ws_get_fd_info(server, client_fds[i]);
-		if (client_info == HTTPD_WS_CLIENT_WEBSOCKET)
-		{
+		if (client_info == HTTPD_WS_CLIENT_WEBSOCKET) {
 			httpd_ws_send_frame_async(hd, client_fds[i], &ws_pkt);
 		}
 	}
 	free(resp_arg);
 }
 
-static esp_err_t trigger_async_send(httpd_handle_t handle, httpd_req_t *req)
-{
+static esp_err_t trigger_async_send(httpd_handle_t handle, httpd_req_t *req) {
 	struct async_resp_arg *resp_arg = malloc(sizeof(struct async_resp_arg));
 	resp_arg->hd = req->handle;
 	resp_arg->fd = httpd_req_to_sockfd(req);
 	return httpd_queue_work(handle, ws_async_send, resp_arg);
 }
 
-static esp_err_t handle_ws_req(httpd_req_t *req)
-{
-	if (req->method == HTTP_GET)
-	{
+static esp_err_t handle_ws_req(httpd_req_t *req) {
+	if (req->method == HTTP_GET) {
 		ESP_LOGI(TAG, "Handshake done, the new connection was opened");
 		return ESP_OK;
 	}
@@ -568,25 +529,21 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 	memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
 	ws_pkt.type = HTTPD_WS_TYPE_TEXT;
 	esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
-	if (ret != ESP_OK)
-	{
+	if (ret != ESP_OK) {
 		ESP_LOGE(TAG, "httpd_ws_recv_frame failed to get frame len with %d",
 				ret);
 		return ret;
 	}
 
-	if (ws_pkt.len)
-	{
+	if (ws_pkt.len) {
 		buf = calloc(1, ws_pkt.len + 1);
-		if (buf == NULL)
-		{
+		if (buf == NULL) {
 			ESP_LOGE(TAG, "Failed to calloc memory for buf");
 			return ESP_ERR_NO_MEM;
 		}
 		ws_pkt.payload = buf;
 		ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
-		if (ret != ESP_OK)
-		{
+		if (ret != ESP_OK) {
 			ESP_LOGE(TAG, "httpd_ws_recv_frame failed with %d", ret);
 			free(buf);
 			return ret;
@@ -597,50 +554,44 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 	ESP_LOGI(TAG, "frame len is %d", ws_pkt.len);
 
 	if (ws_pkt.type == HTTPD_WS_TYPE_TEXT
-			&& strcmp((char*) ws_pkt.payload, "toggle") == 0)
-	{
+			&& strcmp((char*) ws_pkt.payload, "toggle") == 0) {
 		free(buf);
 		return trigger_async_send(req->handle, req);
 	}
 	return ESP_OK;
 }
 
-void websocket_app_start(void)
-{
+void websocket_app_start(void) {
 	httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
-	// Create URI (Uniform Resource Identifier)
-	// for the server which is added to default gateway
-	static const httpd_uri_t uri_handler =
-		{
-				.uri = "/ws",
-				.method = HTTP_GET,
-				.handler = handle_ws_req,
-				.user_ctx = NULL,
-				.is_websocket = true };
+// Create URI (Uniform Resource Identifier)
+// for the server which is added to default gateway
+	static const httpd_uri_t uri_handler = {
+			.uri = "/ws",
+			.method = HTTP_GET,
+			.handler = handle_ws_req,
+			.user_ctx =
+			NULL,
+			.is_websocket = true };
 
-	static const httpd_uri_t uri_get =
-		{
-				.uri = "/",
-				.method = HTTP_GET,
-				.handler = get_req_handler,
-				.user_ctx =
-				NULL };
+	static const httpd_uri_t uri_get = {
+			.uri = "/",
+			.method = HTTP_GET,
+			.handler = get_req_handler,
+			.user_ctx =
+			NULL };
 
-	// Start the httpd server
+// Start the httpd server
 	ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
-	if (httpd_start(&server, &config) == ESP_OK)
-	{
+	if (httpd_start(&server, &config) == ESP_OK) {
 		ESP_LOGI(TAG, "Registering URI handler");
 		httpd_register_uri_handler(server, &uri_handler);
 		httpd_register_uri_handler(server, &uri_get);
 	}
 }
 
-static void websocket_task(void *pvParameters)
-{
-	while (!connection_ok)
-	{
+static void websocket_task(void *pvParameters) {
+	while (!connection_ok) {
 		// wait for connection
 		vTaskDelay(5000 / portTICK_PERIOD_MS);
 	}
@@ -651,16 +602,14 @@ static void websocket_task(void *pvParameters)
 }
 /// HTTP SERVER + WEBSOCKET END
 
-void app_main(void)
-{
+void app_main(void) {
 	esp_timer_early_init();
 	gpio_set_direction(RELE_PIN, GPIO_MODE_OUTPUT);
 
 	initi_web_page_buffer();
 
 	esp_err_t ret = nvs_flash_init();
-	if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-	{
+	if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
 		ESP_ERROR_CHECK(nvs_flash_erase());
 		ret = nvs_flash_init();
 	}
@@ -677,4 +626,15 @@ void app_main(void)
 	xTaskCreate(&task_ota, "task_ota", 8192, NULL, 5, NULL);
 	xTaskCreate(publisher_task, "publisher_task", 1024 * 5, NULL, 5, NULL);
 	xTaskCreate(websocket_task, "websocket_task", 1024 * 5, NULL, 5, NULL);
+
+#ifdef START_MODBUS_MASTER
+	ESP_ERROR_CHECK(master_init());
+	vTaskDelay(10);
+	test_modbus_read_write();
+#endif
+
+#ifdef START_MODBUS_SLAVE
+	// todo
+#endif
+
 }

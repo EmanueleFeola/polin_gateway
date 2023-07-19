@@ -18,5 +18,21 @@ Tested on "esp32 evb" board
 	- firmware version and firmware bin file are set in a file hosted in the cloud
 		- see defines.h (OTA_URI_JSON)
 - mqtt client
-	- connects to server and sends/receive messages
-	- mqtt server uri is set in defines.h (MQTT_URI)
+	- connects to server and sends/receives messages
+		- the mqtts server used for tests is: https://test.mosquitto.org/
+	- mqtt settings in defines.h:
+		- MQTT_URI, i.e. protocol + server + port
+		- MQTT_USERNAME
+		- MQTT_PASSWORD
+		- MQTT_SERVER_CERT
+			- needed to use MQTT over SSL
+	- NB: port 8883 is mqtts, not mqtt
+- modbus master
+	- connect to modbus slave, reads/write two registers
+	- modbus settings in components/utils/modbus_utils.h
+		- MB_DEV_SPEED, i.e. baudrate
+		- MB_TXD, i.e. TX gpio
+		- MB_RXD, i.e. RX gpio
+		- MB_PORT_NUM, i.e. UART port number
+	- NB: the modbus slave is simulated using ModRSsim2
+- modbus slave: todo
