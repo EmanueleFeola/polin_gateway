@@ -1,17 +1,10 @@
-/*
- * utils.c
- *
- *  Created on: 13 Jul 2023
- *      Author: emanu
- */
-
 #include "utils.h"
 
 unsigned long millis() {
 	return (unsigned long) (esp_timer_get_time() / 1000ULL);
 }
 
-void get_ip_bytes(char *ipv4, uint8_t* ip_array) {
+void get_ip_bytes(char *ipv4, uint8_t *ip_array) {
 	/*
 	 * input: "192.178.168.1"
 	 * output: [192, 178, 168, 1]

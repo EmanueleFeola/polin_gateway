@@ -11,11 +11,13 @@
 #define STATIC_DNS_BACKUP_ADDR "8.8.8.8"
 
 // WIFI
-#define EXAMPLE_ESP_WIFI_SSID "CasaFeola-Eolo"
-#define EXAMPLE_ESP_WIFI_PASS "straccidinebbialenti"
+#define EXAMPLE_ESP_WIFI_SSID "wifi ssid"
+#define EXAMPLE_ESP_WIFI_PASS "pwd"
 // #define EXAMPLE_ESP_WIFI_SSID "Pixel_8801"
 // #define EXAMPLE_ESP_WIFI_PASS "franzogna"
 #define MAX_RETRY 10
+#define MDNS_HOSTNAME "polin_gateway" // (http://polin_gateway.local/) hostname that will be resolved by the esp32 chip
+#define MDNS_INSTANCE_NAME "polin gateway board" // description of the device
 
 // ETHERNET
 #define PIN_ETH_MDC 23
@@ -24,8 +26,8 @@
 #define ETH_PHY_ADDR 0
 
 // MODBUS
-//#define START_MODBUS_MASTER
-//#define START_MODBUS_SLAVE
+#define START_MODBUS_MASTER // uncomment to start modbus master
+// #define START_MODBUS_SLAVE // uncomment to start modbus slave
 
 // GPIO
 #define OLIMEX_BUT_PIN 34

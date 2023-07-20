@@ -53,6 +53,16 @@ char index_html[4096];
 char rcv_buffer[1000];
 char response_data[4096];
 
+void mdns_set_hostname() {
+	esp_err_t err = mdns_init();
+	if (err) {
+		printf("MDNS Init failed: %d\n", err);
+		return;
+	}
+	mdns_hostname_set(MDNS_HOSTNAME); //set hostname
+	mdns_instance_name_set(MDNS_INSTANCE_NAME); //set default instance
+}
+
 static void set_static_ip(esp_netif_t *netif) {
 	esp_netif_ip_info_t ip_info = { 0 };
 	esp_netif_dns_info_t dns_info = { 0 };
@@ -67,41 +77,18 @@ static void set_static_ip(esp_netif_t *netif) {
 	get_ip_bytes((char*) STATIC_NETMASK_ADDR, ip_mask_arr);
 
 	IP4_ADDR(&ip_info.ip, ip_arr[0], ip_arr[1], ip_arr[2], ip_arr[3]);
-	IP4_ADDR(&ip_info.gw, ip_gw_arr[0], ip_gw_arr[1], ip_gw_arr[2],
-			ip_gw_arr[3]);
-	IP4_ADDR(&ip_info.netmask, ip_mask_arr[0], ip_mask_arr[1], ip_mask_arr[2],
-			ip_mask_arr[3]);
-	IP_ADDR4(&dns_info.ip, ip_dns_arr[0], ip_dns_arr[1], ip_dns_arr[2],
-			ip_dns_arr[3]);
+	IP4_ADDR(&ip_info.gw, ip_gw_arr[0], ip_gw_arr[1], ip_gw_arr[2], ip_gw_arr[3]);
+	IP4_ADDR(&ip_info.netmask, ip_mask_arr[0], ip_mask_arr[1], ip_mask_arr[2], ip_mask_arr[3]);
+	IP_ADDR4(&dns_info.ip, ip_dns_arr[0], ip_dns_arr[1], ip_dns_arr[2], ip_dns_arr[3]);
 	esp_netif_dhcpc_stop(netif);
 	esp_netif_set_ip_info(netif, &ip_info);
 	esp_netif_set_dns_info(netif, ESP_NETIF_DNS_MAIN, &dns_info);
-}
 
-static void test_modbus_read_write() {
-	esp_err_t err = ESP_OK;
-	uint16_t register_data = 0;
-
-	ESP_LOGI(TAG, "Modbus master test start");
-
-	err = read_modbus_parameter(HOLD_1, &register_data);
-	if (err == ESP_OK) {
-		register_data += 1;
-		err = write_modbus_parameter(HOLD_1, &register_data);
-	}
-
-	err = read_modbus_parameter(HOLD_2, &register_data);
-	if (err == ESP_OK) {
-		register_data += 1;
-		err = write_modbus_parameter(HOLD_2, &register_data);
-	}
-
-	ESP_LOGI(TAG, "Modbus master test end");
+	mdns_set_hostname();
 }
 
 /// ETHERNET START
-static void eth_event_handler(void *arg, esp_event_base_t event_base,
-		int32_t event_id, void *event_data) {
+static void eth_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
 	uint8_t mac_addr[6] = { 0 };
 	/* we can get the ethernet driver handle from event data */
 	esp_eth_handle_t eth_handle = *(esp_eth_handle_t*) event_data;
@@ -110,9 +97,7 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
 	case ETHERNET_EVENT_CONNECTED:
 		esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, mac_addr);
 		ESP_LOGI(TAG, "Ethernet Link Up");
-		ESP_LOGI(TAG, "Ethernet HW Addr %02x:%02x:%02x:%02x:%02x:%02x",
-				mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4],
-				mac_addr[5]);
+		ESP_LOGI(TAG, "Ethernet HW Addr %02x:%02x:%02x:%02x:%02x:%02x", mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
 		break;
 	case ETHERNET_EVENT_DISCONNECTED:
 		ESP_LOGI(TAG, "Ethernet Link Down");
@@ -128,8 +113,7 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
 	}
 }
 
-static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
-		int32_t event_id, void *event_data) {
+static void got_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
 	ip_event_got_ip_t *event = (ip_event_got_ip_t*) event_data;
 	const esp_netif_ip_info_t *ip_info = &event->ip_info;
 
@@ -169,12 +153,9 @@ static void ethernet_init() {
 	/* static ip address */
 	set_static_ip(eth_netif);
 
-	ESP_ERROR_CHECK(
-			esp_netif_attach(eth_netif, esp_eth_new_netif_glue(eth_handle))); // attach Ethernet driver to TCP/IP stack
-	ESP_ERROR_CHECK(
-			esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &eth_event_handler, NULL)); // Register user defined event handers
-	ESP_ERROR_CHECK(
-			esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &got_ip_event_handler, NULL)); // Register user defined event handers
+	ESP_ERROR_CHECK(esp_netif_attach(eth_netif, esp_eth_new_netif_glue(eth_handle))); // attach Ethernet driver to TCP/IP stack
+	ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &eth_event_handler, NULL)); // Register user defined event handers
+	ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &got_ip_event_handler, NULL)); // Register user defined event handers
 
 	/* start Ethernet driver state machine */
 	ESP_ERROR_CHECK(esp_eth_start(eth_handle));
@@ -183,8 +164,7 @@ static void ethernet_init() {
 /// ETHERNET END
 
 /// WIFI
-static esp_err_t wifi_event_handler(void *arg, esp_event_base_t event_base,
-		int32_t event_id, void *event_data) {
+static esp_err_t wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
 	switch (event_id) {
 	case WIFI_EVENT_STA_START:
 		esp_wifi_connect();
@@ -220,10 +200,8 @@ void wifi_init(void) {
 
 	esp_event_loop_create_default();
 
-	wifi_config_t wifi_config = { .sta = {
-			.ssid = EXAMPLE_ESP_WIFI_SSID,
-			.password = EXAMPLE_ESP_WIFI_PASS,
-			.threshold.authmode = WIFI_AUTH_WPA2_PSK, }, };
+	wifi_config_t wifi_config = { .sta =
+			{ .ssid = EXAMPLE_ESP_WIFI_SSID, .password = EXAMPLE_ESP_WIFI_PASS, .threshold.authmode = WIFI_AUTH_WPA2_PSK, }, };
 	esp_netif_init();
 	esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
 
@@ -232,10 +210,8 @@ void wifi_init(void) {
 	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 	esp_wifi_init(&cfg);
 
-	esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
-			&wifi_event_handler, sta_netif);
-	esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-			&wifi_event_handler, sta_netif);
+	esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, sta_netif);
+	esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, sta_netif);
 
 	esp_wifi_set_mode(WIFI_MODE_STA);
 	esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config);
@@ -275,8 +251,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
 void start_ota_update(char *ota_uri_bin) {
 	ESP_LOGI(TAG, "start_ota_update %s\n", ota_uri_bin);
 
-	esp_http_client_config_t config = { .url = ota_uri_bin, .cert_pem =
-			(char*) OTA_SERVER_ROOT_CA, .skip_cert_common_name_check = false };
+	esp_http_client_config_t config = { .url = ota_uri_bin, .cert_pem = (char*) OTA_SERVER_ROOT_CA, .skip_cert_common_name_check = false };
 	esp_https_ota_config_t ota_config = { .http_config = &config, };
 
 	esp_err_t ret = esp_https_ota(&ota_config);
@@ -292,8 +267,7 @@ char* ota_get_json() {
 	ESP_LOGI(TAG, "ota_get_json");
 
 	// configure the esp_http_client
-	esp_http_client_config_t config = { .url = OTA_URI_JSON, .event_handler =
-			_http_event_handler, .cert_pem = (char*) OTA_SERVER_ROOT_CA, };
+	esp_http_client_config_t config = { .url = OTA_URI_JSON, .event_handler = _http_event_handler, .cert_pem = (char*) OTA_SERVER_ROOT_CA, };
 	esp_http_client_handle_t client = esp_http_client_init(&config);
 
 	// download json file (fw version and bin uri)
@@ -312,13 +286,11 @@ char* ota_get_json() {
 				ESP_LOGE(TAG, "cannot read version field. abort");
 			} else {
 				int new_version = (int) version->valuedouble;
-				ESP_LOGI(TAG, "current fw ver %d, available fw ver %d",
-						FIRMWARE_VERSION, new_version);
+				ESP_LOGI(TAG, "current fw ver %d, available fw ver %d", FIRMWARE_VERSION, new_version);
 
 				if (new_version > FIRMWARE_VERSION) {
 					if (cJSON_IsString(file) && (file->valuestring != NULL)) {
-						ESP_LOGI(TAG, "upgrading. firmware uri: %s",
-								file->valuestring);
+						ESP_LOGI(TAG, "upgrading. firmware uri: %s", file->valuestring);
 
 						esp_http_client_cleanup(client);
 						return (char*) file->valuestring;
@@ -377,8 +349,7 @@ static void initi_web_page_buffer(void) {
 }
 
 /// MQTT START
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
-		int32_t event_id, void *event_data) {
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
 	// ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
 	esp_mqtt_event_handle_t event = event_data;
 	esp_mqtt_client_handle_t client = event->client;
@@ -428,8 +399,7 @@ static void mqtt_app_start(void) {
 	NULL, .authentication = { .password = MQTT_PASSWORD } } };
 
 	client = esp_mqtt_client_init(&mqttConfig);
-	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler,
-			client);
+	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, client);
 	esp_mqtt_client_start(client);
 }
 
@@ -447,8 +417,7 @@ void publisher_task(void *params) {
 			snprintf(pub_str, max_len, "hello world banana %d", (int) millis());
 			printf("sending %s\n", pub_str);
 
-			esp_mqtt_client_publish(client, "/emanuele_topic/test3/", pub_str,
-					0, 0, 0);
+			esp_mqtt_client_publish(client, "/emanuele_topic/test3/", pub_str, 0, 0, 0);
 
 			vTaskDelay(5000 / portTICK_PERIOD_MS);
 		}
@@ -478,7 +447,6 @@ static void ws_async_send(void *arg) {
 	httpd_ws_frame_t ws_pkt;
 	struct async_resp_arg *resp_arg = arg;
 	httpd_handle_t hd = resp_arg->hd;
-	int fd = resp_arg->fd;
 
 	rele_state = !rele_state;
 	gpio_set_level(RELE_PIN, rele_state);
@@ -530,8 +498,7 @@ static esp_err_t handle_ws_req(httpd_req_t *req) {
 	ws_pkt.type = HTTPD_WS_TYPE_TEXT;
 	esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
 	if (ret != ESP_OK) {
-		ESP_LOGE(TAG, "httpd_ws_recv_frame failed to get frame len with %d",
-				ret);
+		ESP_LOGE(TAG, "httpd_ws_recv_frame failed to get frame len with %d", ret);
 		return ret;
 	}
 
@@ -553,8 +520,7 @@ static esp_err_t handle_ws_req(httpd_req_t *req) {
 
 	ESP_LOGI(TAG, "frame len is %d", ws_pkt.len);
 
-	if (ws_pkt.type == HTTPD_WS_TYPE_TEXT
-			&& strcmp((char*) ws_pkt.payload, "toggle") == 0) {
+	if (ws_pkt.type == HTTPD_WS_TYPE_TEXT && strcmp((char*) ws_pkt.payload, "toggle") == 0) {
 		free(buf);
 		return trigger_async_send(req->handle, req);
 	}
@@ -566,20 +532,11 @@ void websocket_app_start(void) {
 
 // Create URI (Uniform Resource Identifier)
 // for the server which is added to default gateway
-	static const httpd_uri_t uri_handler = {
-			.uri = "/ws",
-			.method = HTTP_GET,
-			.handler = handle_ws_req,
-			.user_ctx =
-			NULL,
-			.is_websocket = true };
+	static const httpd_uri_t uri_handler = { .uri = "/ws", .method = HTTP_GET, .handler = handle_ws_req, .user_ctx =
+	NULL, .is_websocket = true };
 
-	static const httpd_uri_t uri_get = {
-			.uri = "/",
-			.method = HTTP_GET,
-			.handler = get_req_handler,
-			.user_ctx =
-			NULL };
+	static const httpd_uri_t uri_get = { .uri = "/", .method = HTTP_GET, .handler = get_req_handler, .user_ctx =
+	NULL };
 
 // Start the httpd server
 	ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -623,18 +580,18 @@ void app_main(void) {
 	ethernet_init();
 #endif
 
-	xTaskCreate(&task_ota, "task_ota", 8192, NULL, 5, NULL);
-	xTaskCreate(publisher_task, "publisher_task", 1024 * 5, NULL, 5, NULL);
-	xTaskCreate(websocket_task, "websocket_task", 1024 * 5, NULL, 5, NULL);
+	//xTaskCreate(&task_ota, "task_ota", 8192, NULL, 5, NULL); // uncomment to start ota task
+	//xTaskCreate(publisher_task, "publisher_task", 1024 * 5, NULL, 5, NULL); // uncomment to start mqtt task
+	xTaskCreate(websocket_task, "websocket_task", 1024 * 5, NULL, 5, NULL); // uncomment to start websocket task
 
 #ifdef START_MODBUS_MASTER
-	ESP_ERROR_CHECK(master_init());
-	vTaskDelay(10);
-	test_modbus_read_write();
+	ESP_ERROR_CHECK(modbus_master_init());
+	modbus_master_test_read_write();
 #endif
 
 #ifdef START_MODBUS_SLAVE
-	// todo
+	modbus_slave_init();
+	modbus_slave_loop();
 #endif
 
 }
