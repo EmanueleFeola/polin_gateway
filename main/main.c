@@ -63,6 +63,7 @@ void mdns_set_hostname() {
 	mdns_instance_name_set(MDNS_INSTANCE_NAME); //set default instance
 }
 
+/*
 static void set_static_ip(esp_netif_t *netif) {
 	esp_netif_ip_info_t ip_info = { 0 };
 	esp_netif_dns_info_t dns_info = { 0 };
@@ -86,6 +87,7 @@ static void set_static_ip(esp_netif_t *netif) {
 
 	mdns_set_hostname();
 }
+*/
 
 /// ETHERNET START
 static void eth_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -151,7 +153,8 @@ static void ethernet_init() {
 	esp_netif_t *eth_netif = esp_netif_new(&cfg);
 
 	/* static ip address */
-	set_static_ip(eth_netif);
+	// set_static_ip(eth_netif);
+	mdns_set_hostname();
 
 	ESP_ERROR_CHECK(esp_netif_attach(eth_netif, esp_eth_new_netif_glue(eth_handle))); // attach Ethernet driver to TCP/IP stack
 	ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &eth_event_handler, NULL)); // Register user defined event handers
@@ -205,7 +208,8 @@ void wifi_init(void) {
 	esp_netif_init();
 	esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
 
-	set_static_ip(sta_netif);
+	// set_static_ip(sta_netif);
+	mdns_set_hostname();
 
 	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 	esp_wifi_init(&cfg);
@@ -581,7 +585,7 @@ void app_main(void) {
 #endif
 
 	//xTaskCreate(&task_ota, "task_ota", 8192, NULL, 5, NULL); // uncomment to start ota task
-	//xTaskCreate(publisher_task, "publisher_task", 1024 * 5, NULL, 5, NULL); // uncomment to start mqtt task
+	xTaskCreate(publisher_task, "publisher_task", 1024 * 5, NULL, 5, NULL); // uncomment to start mqtt task
 	xTaskCreate(websocket_task, "websocket_task", 1024 * 5, NULL, 5, NULL); // uncomment to start websocket task
 
 #ifdef START_MODBUS_MASTER

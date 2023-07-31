@@ -8,8 +8,10 @@ menuconfig settings:
 # Hardware
 Tested on "esp32 evb" board
 # Features
-- esp32 connects to network with static ip, either wifi or ethernet depending on defines.h settings
-	- static ip address and wifi network credentials are set in defines.h
+- esp32 connects to network, either wifi or ethernet depending on defines.h settings
+	- wifi network credentials are set in defines.h
+	- the IP address is not static, the esp32 is accessible using its hostname "polin_gateway.local"
+		- the mdns hostname is set in defines.h (MDNS_HOSTNAME)
 - web server
 	- stores html page in spiffs file system
 	- serve page and allows to toggle relè
@@ -27,12 +29,16 @@ Tested on "esp32 evb" board
 		- MQTT_SERVER_CERT
 			- needed to use MQTT over SSL
 	- NB: port 8883 is mqtts, not mqtt
-- modbus master
-	- connect to modbus slave, reads/write two registers
+- modbus 
 	- modbus settings in components/utils/modbus_utils.h
 		- MB_DEV_SPEED, i.e. baudrate
 		- MB_TXD, i.e. TX gpio
 		- MB_RXD, i.e. RX gpio
 		- MB_PORT_NUM, i.e. UART port number
-	- NB: the modbus slave is simulated using ModRSsim2
-- modbus slave: todo
+		- MB_DEVICE_ADDR1: master/slave address
+- modbus master
+	- connect to modbus slave, reads/writes two registers
+	- NB: the modbus slave is simulated using ModRSsim2 for windows
+- modbus slave:
+	- esp32 has two holding registers that can be interrogated by modbus master
+	- NB: modbus master simulated using RMMS for windows

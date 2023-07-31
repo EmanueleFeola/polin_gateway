@@ -4,15 +4,23 @@
 //#define START_ETH // uncomment to connect to ethernet
 
 // NETWORK
+/*
 #define STATIC_IP_ADDR "192.168.178.15"
 #define STATIC_NETMASK_ADDR "255.255.255.0"
 #define STATIC_GW_ADDR "192.168.178.1"
 #define STATIC_DNS_ADDR "192.168.178.1"
+*/
+/*
+#define STATIC_IP_ADDR "192.168.218.15"
+#define STATIC_NETMASK_ADDR "255.255.255.0"
+#define STATIC_GW_ADDR "192.168.218.143"
+#define STATIC_DNS_ADDR "192.168.218.143"
 #define STATIC_DNS_BACKUP_ADDR "8.8.8.8"
+*/
 
 // WIFI
-#define EXAMPLE_ESP_WIFI_SSID "wifi ssid"
-#define EXAMPLE_ESP_WIFI_PASS "pwd"
+#define EXAMPLE_ESP_WIFI_SSID "wifissid"
+#define EXAMPLE_ESP_WIFI_PASS "wifipwd"
 // #define EXAMPLE_ESP_WIFI_SSID "Pixel_8801"
 // #define EXAMPLE_ESP_WIFI_PASS "franzogna"
 #define MAX_RETRY 10
